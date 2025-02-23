@@ -14,15 +14,26 @@ public class JwtUtil {
 
     private static final String SECRET_KEY = "eW91cl9iYXNlNjRfZW5jb2RlZF8yNTZiaXRfc2VjcmV0X2tleQ=="; // 256-bit 키 필요
     private static final long EXPIRATION_TIME = 86400000; // 1일 (밀리초 단위)
+    private static final long REFRESH_TOKEN_EXPIRATION = 604800000; // 7일 (밀리초 단위)
 
     private final Key key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET_KEY));
 
-    // JWT 토큰 생성
-    public String generateToken(String email) {
+    // Access Token 생성 (짧은 유효기간)
+    public String generateAccessToken(String email) {
         return Jwts.builder()
                 .subject(email)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .signWith(key)
+                .compact();
+    }
+
+    // Refresh Token 생성 (긴 유효기간)
+    public String generateRefreshToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION))
                 .signWith(key)
                 .compact();
     }
