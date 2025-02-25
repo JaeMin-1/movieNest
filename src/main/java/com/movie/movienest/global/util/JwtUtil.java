@@ -50,4 +50,19 @@ public class JwtUtil {
             return null;
         }
     }
+
+    // refreshToken이 유효한 경우 새로운 accessToken 발급
+    public String validateRefreshToken(String refreshToken) {
+        try {
+            Jws<Claims> claimsJws = Jwts.parser()
+                    .verifyWith((SecretKey) key)
+                    .build()
+                    .parseSignedClaims(refreshToken);
+
+            String email = claimsJws.getPayload().getSubject();
+            return generateAccessToken(email); // 새로운 accessToken 발급
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

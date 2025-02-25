@@ -17,7 +17,7 @@ public class MovieController {
     private final MovieService movieService;
 
     @GetMapping("/search")
-    public ResponseEntity<List<MovieSearchResponse.MovieSummary>> searchMovies(@RequestParam String query) {
+    public ResponseEntity<MovieSearchResponse> searchMovies(@RequestParam String query) {
         return ResponseEntity.ok(movieService.searchMovies(query));
     }
 
