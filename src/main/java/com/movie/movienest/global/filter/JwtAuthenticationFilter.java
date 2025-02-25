@@ -7,10 +7,14 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-
 import java.io.IOException;
+import java.util.Arrays;
 
 @Component
 @RequiredArgsConstructor
@@ -19,23 +23,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        String token = resolveToken(request);
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
 
-        if (token != null && jwtUtil.validateToken(token) == null) {
-            Cookie[] cookies = request.getCookies();
-            if (cookies != null) {
-                for (Cookie cookie : cookies) {
-                    if (cookie.getName().equals("refreshToken")) {
-                        String refreshToken = cookie.getValue();
-                        String email = jwtUtil.validateToken(refreshToken);
+        String accessToken = resolveToken(request);
+        String refreshToken = getRefreshTokenFromCookie(request);
 
-                        if (email != null) {
-                            String newAccessToken = jwtUtil.generateAccessToken(email);
-                            response.setHeader("Authorization", "Bearer " + newAccessToken);
-                        }
-                    }
+        if (accessToken != null) {
+            String email = jwtUtil.validateToken(accessToken);
+
+            if (email == null && refreshToken != null) { // 액세스 토큰이 만료됨 → 자동 갱신
+                String newAccessToken = jwtUtil.validateRefreshToken(refreshToken);
+
+                if (newAccessToken != null) {
+                    response.setHeader("Authorization", "Bearer " + newAccessToken);
+                    email = jwtUtil.validateToken(newAccessToken);
                 }
+            }
+
+            if (email != null) {
+                setAuthentication(email);
             }
         }
 
@@ -43,10 +50,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private String resolveToken(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+        String token = request.getHeader("Authorization");
+        if (token != null && token.startsWith("Bearer ")) {
+            return token.substring(7);
         }
         return null;
+    }
+
+    private String getRefreshTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() != null) {
+            return Arrays.stream(request.getCookies())
+                    .filter(cookie -> "refreshToken".equals(cookie.getName()))
+                    .map(Cookie::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+        return null;
+    }
+
+    private void setAuthentication(String email) {
+        UserDetails userDetails = User.withUsername(email).password("").authorities("USER").build();
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }
