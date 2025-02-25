@@ -1,10 +1,12 @@
 package com.movie.movienest.domain.movie.service;
 
+import com.movie.movienest.domain.favorite.repository.FavoriteRepository;
 import com.movie.movienest.domain.movie.dto.response.MovieDetailResponse;
 import com.movie.movienest.domain.movie.dto.response.MovieSearchResponse;
 import com.movie.movienest.domain.movie.entity.Movie;
 import com.movie.movienest.domain.review.dto.response.ReviewResponse;
 import com.movie.movienest.domain.review.repository.ReviewRepository;
+import com.movie.movienest.domain.user.entity.User;
 import com.movie.movienest.global.tmdb.TmdbClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ public class MovieService {
 
     private final TmdbClient tmdbClient;
     private final ReviewRepository reviewRepository;
+    private final FavoriteRepository favoriteRepository;
 
     @Transactional(readOnly = true)
     public MovieSearchResponse searchMovies(String query) {
@@ -41,8 +44,10 @@ public class MovieService {
     }
 
     @Transactional(readOnly = true)
-    public MovieDetailResponse getMovieDetails(Long movieId) {
+    public MovieDetailResponse getMovieDetails(Long movieId, User user) {
         Movie movie = tmdbClient.getMovieDetails(movieId);
+
+        boolean isFavorite = user != null && favoriteRepository.findByUserAndMovieId(user, movieId).isPresent();
 
         // 리뷰 목록을 ReviewResponse로 변환
         List<ReviewResponse> reviewResponses = reviewRepository.findByMovieId(movieId)
@@ -74,6 +79,7 @@ public class MovieService {
                                 .build())
                         .collect(Collectors.toList()))
                 .userReviews(reviewResponses)
+                .isFavorite(isFavorite)
                 .build();
     }
 }

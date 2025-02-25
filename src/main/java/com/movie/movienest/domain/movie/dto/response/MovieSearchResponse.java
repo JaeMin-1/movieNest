@@ -27,5 +27,7 @@ public class MovieSearchResponse {
         @Setter
         @JsonProperty("poster_path")
         private String posterPath;
+
+        private int reviewCount;
     }
 }
