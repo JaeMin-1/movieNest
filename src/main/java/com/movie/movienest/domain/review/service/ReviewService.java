@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 public class ReviewService {
 
     private final ReviewRepository reviewRepository;
-    private final EntityManager entityManager;
 
     @Transactional
     public void createReview(User user, Long movieId, ReviewRequest request) {

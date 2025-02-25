@@ -22,6 +22,7 @@ public class MovieDetailResponse {
     private final String director;
     private final List<Actor> mainActors;
     private final List<ReviewResponse> userReviews;
+    private boolean isFavorite;
 
     @Getter
     @Builder

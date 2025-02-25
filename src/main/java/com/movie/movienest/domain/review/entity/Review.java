@@ -30,7 +30,6 @@ public class Review extends BaseEntity {
     @Column(nullable = false)
     private Double rating;
 
-    // 리뷰 수정 (updatedAt 자동 변경됨)
     public void updateReview(String content, Double rating) {
         this.content = content;
         this.rating = rating;
