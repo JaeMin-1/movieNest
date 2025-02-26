@@ -2,6 +2,7 @@ package com.movie.movienest.domain.movie.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,15 +15,16 @@ public class MovieSearchResponse {
     @JsonProperty("results")
     private List<MovieSummary> movies;
 
-    @JsonProperty("total_pages") // TMDB 응답의 total_pages와 매핑
+    @JsonProperty("total_pages")
     private int totalPages;
 
-    @JsonProperty("page") // 현재 페이지 번호 추가
+    @JsonProperty("page")
     private int currentPage;
 
     @Getter
     @Setter
     @Builder
+    @EqualsAndHashCode(of = "id")
     public static class MovieSummary {
         private Long id;
         private String title;

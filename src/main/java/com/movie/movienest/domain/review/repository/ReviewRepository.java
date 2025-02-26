@@ -19,5 +19,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT COUNT(r) FROM Review r WHERE r.movieId = :movieId")
     int countByMovieId(Long movieId);
+
+    @Query("SELECT r.movieId FROM Review r WHERE r.user.id = :userId AND r.rating >= :rating")
+    List<Long> findHighlyRatedMovieIdsByUser(@Param("userId") Long userId, @Param("rating") double rating);
 }
 
