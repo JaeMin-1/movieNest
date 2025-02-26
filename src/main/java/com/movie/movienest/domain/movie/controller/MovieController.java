@@ -22,8 +22,10 @@ public class MovieController {
     private final UserRepository userRepository;
 
     @GetMapping("/search")
-    public ResponseEntity<MovieSearchResponse> searchMovies(@RequestParam String query) {
-        return ResponseEntity.ok(movieService.searchMovies(query));
+    public ResponseEntity<MovieSearchResponse> searchMovies(
+            @RequestParam String query,
+            @RequestParam(defaultValue = "1") int page) {
+        return ResponseEntity.ok(movieService.searchMovies(query, page));
     }
 
     @GetMapping("/{movieId}")

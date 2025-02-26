@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,22 +26,25 @@ public class MovieService {
     private final FavoriteRepository favoriteRepository;
 
     @Transactional(readOnly = true)
-    public MovieSearchResponse searchMovies(String query) {
-        MovieSearchResponse response = tmdbClient.searchMovies(query);
+    public MovieSearchResponse searchMovies(String query, int page) {
+        var response = tmdbClient.searchMovies(query, page);
 
         List<MovieSearchResponse.MovieSummary> movies = response.getMovies().stream()
                 .map(movie -> MovieSearchResponse.MovieSummary.builder()
                         .id(movie.getId())
                         .title(movie.getTitle())
-                        .averageRating(reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0)) // ✅ 유저 평점 평균 추가
+                        .averageRating(reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0))
                         .releaseDate(movie.getReleaseDate())
                         .posterPath(movie.getPosterPath() != null ? "https://image.tmdb.org/t/p/w500" + movie.getPosterPath() : null)
+                        .reviewCount(reviewRepository.countByMovieId(movie.getId()))
                         .build()
                 )
                 .collect(Collectors.toList());
 
         return MovieSearchResponse.builder()
                 .movies(movies)
+                .totalPages(response.getTotalPages())
+                .currentPage(page)
                 .build();
     }
 
@@ -81,5 +86,85 @@ public class MovieService {
                 .userReviews(reviewResponses)
                 .isFavorite(isFavorite)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public MovieSearchResponse getMoviesByGenre(Long genreId, String sort, int page) {
+        if (sort.equals("rating") || sort.equals("review")) {
+            return fetchAndSortAllMovies(genreId, sort, page);
+        } else {
+            return fetchAndReturnPagedMovies(genreId, sort, page);
+        }
+    }
+
+    private MovieSearchResponse fetchAndSortAllMovies(Long genreId, String sort, int page) {
+        int maxPagesToFetch = 500; // ✅ TMDB 최대 페이지 제한 (모든 영화 가져오기)
+
+        List<MovieSearchResponse.MovieSummary> allMovies = new ArrayList<>();
+
+        // ✅ TMDB에서 모든 페이지 가져오기
+        for (int i = 1; i <= maxPagesToFetch; i++) {
+            var response = tmdbClient.getMoviesByGenre(genreId, i, "popularity");
+            List<MovieSearchResponse.MovieSummary> movies = response.getMovies().stream()
+                    .map(movie -> MovieSearchResponse.MovieSummary.builder()
+                            .id(movie.getId())
+                            .title(movie.getTitle())
+                            .averageRating(reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0))
+                            .releaseDate(movie.getReleaseDate())
+                            .posterPath(movie.getPosterPath() != null ? "https://image.tmdb.org/t/p/w500" + movie.getPosterPath() : null)
+                            .reviewCount(reviewRepository.countByMovieId(movie.getId()))
+                            .build()
+                    )
+                    .toList();
+            allMovies.addAll(movies);
+
+            if (i >= response.getTotalPages()) {
+                break;
+            }
+        }
+
+        // 평점 또는 리뷰 개수 기준으로 전체 정렬
+        allMovies.sort(getCustomComparator(sort));
+
+        // 요청한 페이지의 데이터만 반환 (한 페이지당 20개)
+        int startIndex = (page - 1) * 20;
+        int endIndex = Math.min(startIndex + 20, allMovies.size());
+        List<MovieSearchResponse.MovieSummary> paginatedMovies = allMovies.subList(startIndex, endIndex);
+
+        return MovieSearchResponse.builder()
+                .movies(paginatedMovies)
+                .totalPages((int) Math.ceil((double) allMovies.size() / 20)) // ✅ 전체 정렬된 데이터를 기준으로 총 페이지 수 계산
+                .currentPage(page)
+                .build();
+    }
+
+    private MovieSearchResponse fetchAndReturnPagedMovies(Long genreId, String sort, int page) {
+        var response = tmdbClient.getMoviesByGenre(genreId, page, sort);
+
+        List<MovieSearchResponse.MovieSummary> movies = response.getMovies().stream()
+                .map(movie -> MovieSearchResponse.MovieSummary.builder()
+                        .id(movie.getId())
+                        .title(movie.getTitle())
+                        .averageRating(reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0))
+                        .releaseDate(movie.getReleaseDate())
+                        .posterPath(movie.getPosterPath() != null ? "https://image.tmdb.org/t/p/w500" + movie.getPosterPath() : null)
+                        .reviewCount(reviewRepository.countByMovieId(movie.getId()))
+                        .build()
+                )
+                .collect(Collectors.toList());
+
+        return MovieSearchResponse.builder()
+                .movies(movies)
+                .totalPages(response.getTotalPages())
+                .currentPage(page)
+                .build();
+    }
+
+    private Comparator<MovieSearchResponse.MovieSummary> getCustomComparator(String sort) {
+        return switch (sort) {
+            case "rating" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getAverageRating).reversed();
+            case "review" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReviewCount).reversed();
+            default -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReleaseDate).reversed();
+        };
     }
 }

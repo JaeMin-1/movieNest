@@ -19,13 +19,31 @@ public class TmdbClient {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public MovieSearchResponse searchMovies(String query) {
-        String url = String.format("%s/search/movie?api_key=%s&query=%s&language=ko-KR", baseUrl, apiKey, query);
+    public MovieSearchResponse searchMovies(String query, int page) {
+        String url = baseUrl + "/search/movie?api_key=" + apiKey + "&query=" + query + "&language=ko&page=" + page;
+
         return restTemplate.getForObject(url, MovieSearchResponse.class);
     }
 
     public Movie getMovieDetails(Long movieId) {
         String url = String.format("%s/movie/%d?api_key=%s&language=ko-KR&append_to_response=credits", baseUrl, movieId, apiKey);
         return restTemplate.getForObject(url, Movie.class);
+    }
+
+    public MovieSearchResponse getMoviesByGenre(Long genreId, int page, String sort) {
+        String sortBy = getSortByParam(sort);
+        String url = baseUrl + "/discover/movie?api_key=" + apiKey +
+                "&with_genres=" + genreId + "&language=ko&page=" + page +
+                "&sort_by=" + sortBy;
+
+        return restTemplate.getForObject(url, MovieSearchResponse.class);
+    }
+
+    private String getSortByParam(String sort) {
+        return switch (sort) {
+            case "date" -> "primary_release_date.desc";  // 최신 개봉일 순
+            case "title" -> "original_title.asc";  // 제목 가나다순 정렬
+            default -> "popularity.desc";
+        };
     }
 }
