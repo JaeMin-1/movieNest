@@ -9,12 +9,11 @@ import com.movie.movienest.domain.review.repository.ReviewRepository;
 import com.movie.movienest.domain.user.entity.User;
 import com.movie.movienest.global.tmdb.TmdbClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,7 +42,7 @@ public class MovieService {
 
         return MovieSearchResponse.builder()
                 .movies(movies)
-                .totalPages(response.getTotalPages())
+                .totalPages(Math.min(500, response.getTotalPages()))
                 .currentPage(page)
                 .build();
     }
@@ -57,7 +56,7 @@ public class MovieService {
         // 리뷰 목록을 ReviewResponse로 변환
         List<ReviewResponse> reviewResponses = reviewRepository.findByMovieId(movieId)
                 .stream()
-                .map(ReviewResponse::fromEntity) // ✅ Review -> ReviewResponse 변환
+                .map(ReviewResponse::fromEntity) // Review -> ReviewResponse 변환
                 .collect(Collectors.toList());
 
         return MovieDetailResponse.builder()
@@ -133,7 +132,7 @@ public class MovieService {
 
         return MovieSearchResponse.builder()
                 .movies(paginatedMovies)
-                .totalPages((int) Math.ceil((double) allMovies.size() / 20)) // ✅ 전체 정렬된 데이터를 기준으로 총 페이지 수 계산
+                .totalPages((int) Math.ceil((double) allMovies.size() / 20)) // 전체 정렬된 데이터를 기준으로 총 페이지 수 계산
                 .currentPage(page)
                 .build();
     }
@@ -155,7 +154,7 @@ public class MovieService {
 
         return MovieSearchResponse.builder()
                 .movies(movies)
-                .totalPages(response.getTotalPages())
+                .totalPages(Math.min(500, response.getTotalPages()))
                 .currentPage(page)
                 .build();
     }
@@ -166,5 +165,104 @@ public class MovieService {
             case "review" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReviewCount).reversed();
             default -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReleaseDate).reversed();
         };
+    }
+
+    @Transactional(readOnly = true)
+    public MovieSearchResponse getRecommendedMovies(User user) {
+        // 1. 사용자가 좋아한 영화 ID 가져오기
+        List<Long> favoriteMovieIds = favoriteRepository.findMovieIdsByUser(user);
+        List<Long> highlyRatedMovieIds = reviewRepository.findHighlyRatedMovieIdsByUser(user.getId(), 5.0);
+
+        // 2. 영화 목록 합치기
+        Set<Long> userPreferredMovieIds = new HashSet<>(favoriteMovieIds);
+        userPreferredMovieIds.addAll(highlyRatedMovieIds);
+
+        // 3. 사용자가 좋아한 영화가 없으면 TMDB 인기 영화 제공
+        if (userPreferredMovieIds.isEmpty()) {
+            return tmdbClient.getPopularMovies(1);
+        }
+
+        // 4. 사용자가 선호하는 장르 추출
+        Map<Integer, Integer> genreFrequency = new HashMap<>();
+        for (Long movieId : userPreferredMovieIds) {
+            List<Integer> genres = tmdbClient.getMovieGenres(movieId);
+            for (Integer genreId : genres) {
+                genreFrequency.put(genreId, genreFrequency.getOrDefault(genreId, 0) + 1);
+            }
+        }
+
+        // 5. 가중치가 높은 순으로 정렬
+        List<Integer> sortedGenres = genreFrequency.entrySet().stream()
+                .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+
+        // 6. 장르 조합을 기반으로 추천 진행
+        List<MovieSearchResponse.MovieSummary> recommendedMovies = new LinkedList<>();
+        for (int genreCount = sortedGenres.size(); genreCount > 0; genreCount--) {
+            List<List<Integer>> genreCombinations = generateGenreCombinations(sortedGenres, genreCount);
+            for (List<Integer> genreCombo : genreCombinations) {
+                List<MovieSearchResponse.MovieSummary> movies = tmdbClient.getMoviesByGenres(genreCombo, 1)
+                        .stream()
+                        .filter(movie -> !userPreferredMovieIds.contains(movie.getId())) // ✅ 이미 본 영화 제외
+                        .map(movie -> {
+                            // 평균 평점 및 리뷰 개수 조회
+                            Double averageRating = reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0);
+                            int reviewCount = reviewRepository.countByMovieId(movie.getId());
+
+                            String posterUrl = (movie.getPosterPath() != null)
+                                    ? "https://image.tmdb.org/t/p/w500" + movie.getPosterPath()
+                                    : null;
+
+                            return MovieSearchResponse.MovieSummary.builder()
+                                    .id(movie.getId())
+                                    .title(movie.getTitle())
+                                    .averageRating(averageRating)
+                                    .reviewCount(reviewCount)
+                                    .releaseDate(movie.getReleaseDate())
+                                    .posterPath(posterUrl)
+                                    .build();
+                        })
+                        .toList();
+
+                recommendedMovies.addAll(movies);
+                if (recommendedMovies.size() >= 20) break;
+            }
+            if (recommendedMovies.size() >= 20) break;
+        }
+
+        // 7. 추천 영화가 부족하면 인기 영화 추가
+        if (recommendedMovies.size() < 20) {
+            List<MovieSearchResponse.MovieSummary> popularMovies = tmdbClient.getPopularMovies(1).getMovies();
+            int moviesToAdd = 20 - recommendedMovies.size();
+            recommendedMovies.addAll(popularMovies.subList(0, Math.min(moviesToAdd, popularMovies.size())));
+        }
+
+        return MovieSearchResponse.builder()
+                .movies(recommendedMovies)
+                .totalPages(1)
+                .currentPage(1)
+                .build();
+    }
+
+    // 장르 조합 생성 메서드
+    private List<List<Integer>> generateGenreCombinations(List<Integer> genres, int size) {
+        List<List<Integer>> result = new ArrayList<>();
+        generateCombinationsHelper(genres, size, 0, new ArrayList<>(), result);
+        return result;
+    }
+
+    // 재귀 헬퍼 메서드
+    private void generateCombinationsHelper(List<Integer> genres, int size, int start, List<Integer> temp, List<List<Integer>> result) {
+        if (temp.size() == size) {
+            result.add(new ArrayList<>(temp));
+            return;
+        }
+
+        for (int i = start; i < genres.size(); i++) {
+            temp.add(genres.get(i));
+            generateCombinationsHelper(genres, size, i + 1, temp, result);
+            temp.remove(temp.size() - 1);
+        }
     }
 }
