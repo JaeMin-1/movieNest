@@ -14,7 +14,14 @@ public class MovieSearchResponse {
     @JsonProperty("results")
     private List<MovieSummary> movies;
 
+    @JsonProperty("total_pages") // TMDB 응답의 total_pages와 매핑
+    private int totalPages;
+
+    @JsonProperty("page") // 현재 페이지 번호 추가
+    private int currentPage;
+
     @Getter
+    @Setter
     @Builder
     public static class MovieSummary {
         private Long id;
@@ -24,7 +31,6 @@ public class MovieSearchResponse {
         @JsonProperty("release_date")
         private String releaseDate;
 
-        @Setter
         @JsonProperty("poster_path")
         private String posterPath;
 

@@ -63,8 +63,7 @@ public class FavoriteService {
         return switch (sort) {
             case "rating" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getAverageRating).reversed();
             case "review" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReviewCount).reversed();
-            case "date" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReleaseDate).reversed();
-            default -> Comparator.comparing(MovieSearchResponse.MovieSummary::getTitle);
+            default -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReleaseDate);
         };
     }
 }
