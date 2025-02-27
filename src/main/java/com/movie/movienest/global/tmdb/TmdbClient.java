@@ -26,13 +26,13 @@ public class TmdbClient {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public MovieSearchResponse searchMovies(String query, int page) {
-        String url = baseUrl + "/search/movie?api_key=" + apiKey + "&query=" + query + "&language=ko&page=" + page;
+        String url = baseUrl + "/search/movie?api_key=" + apiKey + "&query=" + query + "&language=ko&page=" + page + "&region=KR";
 
         return restTemplate.getForObject(url, MovieSearchResponse.class);
     }
 
     public Movie getMovieDetails(Long movieId) {
-        String url = String.format("%s/movie/%d?api_key=%s&language=ko-KR&append_to_response=credits", baseUrl, movieId, apiKey);
+        String url = String.format("%s/movie/%d?api_key=%s&language=ko-KR&region=KR&append_to_response=credits", baseUrl, movieId, apiKey);
         return restTemplate.getForObject(url, Movie.class);
     }
 
@@ -40,7 +40,7 @@ public class TmdbClient {
         String sortBy = getSortByParam(sort);
         String url = baseUrl + "/discover/movie?api_key=" + apiKey +
                 "&with_genres=" + genreId + "&language=ko&page=" + page +
-                "&sort_by=" + sortBy;
+                "&sort_by=" + sortBy + "&region=KR";
 
         return restTemplate.getForObject(url, MovieSearchResponse.class);
     }
@@ -60,7 +60,7 @@ public class TmdbClient {
         }
 
         String url = baseUrl + "/discover/movie?api_key=" + apiKey +
-                "&with_genres=" + genreQuery + "&language=ko&page=" + page + "&sort_by=popularity.desc";
+                "&with_genres=" + genreQuery + "&language=ko&page=" + page + "&sort_by=popularity.desc&region=KR";
 
         MovieSearchResponse response = restTemplate.getForObject(url, MovieSearchResponse.class);
 
@@ -69,13 +69,13 @@ public class TmdbClient {
 
 
     public MovieSearchResponse getPopularMovies(int page) {
-        String url = baseUrl + "/movie/popular?api_key=" + apiKey + "&language=ko&page=" + page;
+        String url = baseUrl + "/movie/popular?api_key=" + apiKey + "&language=ko&page=" + page + "&region=KR";
 
         return restTemplate.getForObject(url, MovieSearchResponse.class);
     }
 
     public List<Integer> getMovieGenres(Long movieId) {
-        String url = String.format("%s/movie/%d?api_key=%s&language=ko-KR", baseUrl, movieId, apiKey);
+        String url = String.format("%s/movie/%d?api_key=%s&language=ko-KR&region=KR", baseUrl, movieId, apiKey);
         MovieGenreResponse response = restTemplate.getForObject(url, MovieGenreResponse.class);
 
         if (response == null || response.getGenres() == null) {
