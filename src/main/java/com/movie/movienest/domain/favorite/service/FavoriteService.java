@@ -3,16 +3,17 @@ package com.movie.movienest.domain.favorite.service;
 import com.movie.movienest.domain.favorite.entity.Favorite;
 import com.movie.movienest.domain.favorite.repository.FavoriteRepository;
 import com.movie.movienest.domain.movie.dto.response.MovieSearchResponse;
-import com.movie.movienest.domain.review.repository.ReviewRepository;
+import com.movie.movienest.domain.movie.entity.Movie;
+import com.movie.movienest.domain.review.service.ReviewService;
 import com.movie.movienest.domain.user.entity.User;
+import com.movie.movienest.domain.user.service.UserService;
 import com.movie.movienest.global.tmdb.TmdbClient;
+import com.movie.movienest.global.util.MovieSortUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,50 +21,50 @@ import java.util.stream.Collectors;
 public class FavoriteService {
 
     private final FavoriteRepository favoriteRepository;
-    private final ReviewRepository reviewRepository;
+    private final ReviewService reviewService;
+    private final UserService userService;
     private final TmdbClient tmdbClient;
 
     @Transactional
-    public String toggleFavorite(User user, Long movieId) {
-        var favoriteOpt = favoriteRepository.findByUserAndMovieId(user, movieId);
+    public String toggleFavorite(Long movieId) {
+        User user = userService.getAuthenticatedUserOrThrow();
 
-        if (favoriteOpt.isPresent()) {
-            favoriteRepository.delete(favoriteOpt.get());
-            return "즐겨찾기 삭제 완료";
-        } else {
-            favoriteRepository.save(Favorite.builder().user(user).movieId(movieId).build());
-            return "즐겨찾기 추가 완료";
-        }
+        return favoriteRepository.findByUserAndMovieId(user, movieId)
+                .map(favorite -> {
+                    favoriteRepository.delete(favorite);
+                    return "즐겨찾기 삭제 완료";
+                })
+                .orElseGet(() -> {
+                    favoriteRepository.save(Favorite.builder().user(user).movieId(movieId).build());
+                    return "즐겨찾기 추가 완료";
+                });
     }
 
     @Transactional(readOnly = true)
-    public List<MovieSearchResponse.MovieSummary> getFavorites(User user, String sort) {
+    public List<MovieSearchResponse.MovieSummary> getFavorites(String sort) {
+        User user = userService.getAuthenticatedUserOrThrow();
         List<Favorite> favorites = favoriteRepository.findByUser(user);
 
         return favorites.stream()
                 .map(favorite -> {
-                    var movie = tmdbClient.getMovieDetails(favorite.getMovieId());
-                    Double averageRating = reviewRepository.findAverageRatingByMovieId(movie.getId()).orElse(0.0);
-                    int reviewCount = reviewRepository.countByMovieId(movie.getId());
-
-                    return MovieSearchResponse.MovieSummary.builder()
-                            .id(movie.getId())
-                            .title(movie.getTitle())
-                            .averageRating(averageRating)
-                            .releaseDate(movie.getReleaseDate())
-                            .posterPath(movie.getPosterPath() != null ? "https://image.tmdb.org/t/p/w500" + movie.getPosterPath() : null)
-                            .reviewCount(reviewCount)
-                            .build();
+                    Movie movie = tmdbClient.getMovieDetails(favorite.getMovieId());
+                    return MovieSearchResponse.MovieSummary.from(
+                            movie,
+                            reviewService.getAverageRating(movie.getId()),
+                            reviewService.getReviewCount(movie.getId()));
                 })
-                .sorted(getComparator(sort))
+                .sorted(MovieSortUtil.getComparator(sort))
                 .collect(Collectors.toList());
     }
 
-    private Comparator<MovieSearchResponse.MovieSummary> getComparator(String sort) {
-        return switch (sort) {
-            case "rating" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getAverageRating).reversed();
-            case "review" -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReviewCount).reversed();
-            default -> Comparator.comparing(MovieSearchResponse.MovieSummary::getReleaseDate);
-        };
+    @Transactional(readOnly = true)
+    public boolean isFavorite(User user, Long movieId) {
+        if (user == null) return false; // 인증되지 않은 사용자는 즐겨찾기할 수 없음
+        return favoriteRepository.findByUserAndMovieId(user, movieId).isPresent();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> getUserFavoriteMovieIds(User user) {
+        return favoriteRepository.findMovieIdsByUser(user);
     }
 }

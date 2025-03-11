@@ -4,7 +4,10 @@ import com.movie.movienest.domain.user.dto.request.LoginRequest;
 import com.movie.movienest.domain.user.dto.request.SignupRequest;
 import com.movie.movienest.domain.user.entity.User;
 import com.movie.movienest.domain.user.repository.UserRepository;
+import com.movie.movienest.global.exception.CustomException;
+import com.movie.movienest.global.exception.ErrorCode;
 import com.movie.movienest.global.util.JwtUtil;
+import com.movie.movienest.global.util.SecurityUtil;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -19,13 +22,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final SecurityUtil securityUtil;
 
     public void signup(SignupRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
+            throw new CustomException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         if (userRepository.findByNickname(request.getNickname()).isPresent()) {
-            throw new IllegalArgumentException("이미 존재하는 닉네임입니다.");
+            throw new CustomException(ErrorCode.NICKNAME_ALREADY_EXISTS);
         }
 
         User user = User.builder()
@@ -40,10 +44,10 @@ public class UserService {
     @Transactional
     public String login(LoginRequest request, HttpServletResponse response) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("이메일이 존재하지 않습니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.EMAIL_NOT_FOUND));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+            throw new CustomException(ErrorCode.INVALID_PASSWORD);
         }
 
         // Access Token & Refresh Token 발급
@@ -71,5 +75,15 @@ public class UserService {
         refreshTokenCookie.setMaxAge(0);
         refreshTokenCookie.setAttribute("SameSite", "Strict");
         response.addCookie(refreshTokenCookie);
+    }
+
+    @Transactional(readOnly = true)
+    public User getAuthenticatedUserOrThrow() {
+        return securityUtil.getCurrentUserOrThrow();
+    }
+
+    @Transactional(readOnly = true)
+    public User getAuthenticatedUserOrNull() {
+        return securityUtil.getCurrentUserOrNull();
     }
 }

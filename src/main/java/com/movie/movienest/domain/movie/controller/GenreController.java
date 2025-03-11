@@ -13,13 +13,21 @@ public class GenreController {
 
     private final MovieService movieService;
 
+    @GetMapping("/genre")
+    public ResponseEntity<MovieSearchResponse> getDefaultGenreMovies(
+            @RequestParam(defaultValue = "popularity") String sort,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+
+        return ResponseEntity.ok(movieService.getMoviesByGenre(28L, sort, limit, offset));
+    }
+
     @GetMapping("/genre/{genreId}")
     public ResponseEntity<MovieSearchResponse> getMoviesByGenre(
-            @PathVariable(required = false) Long genreId,
+            @PathVariable Long genreId,
             @RequestParam(defaultValue = "date") String sort,
-            @RequestParam(defaultValue = "1") int page) {
-
-        Long finalGenreId = (genreId != null) ? genreId : 28L;
-        return ResponseEntity.ok(movieService.getMoviesByGenre(finalGenreId, sort, page));
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
+        return ResponseEntity.ok(movieService.getMoviesByGenre(genreId, sort, limit, offset));
     }
 }
